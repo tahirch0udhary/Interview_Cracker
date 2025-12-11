@@ -8,3 +8,5 @@ release/
 config.json
 .DS_Store
 .vscode/
+whisper/*.bin
+whisper/*.exe
