@@ -1,0 +1,6 @@
+{
+  "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
+  "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
+  "whisper_binary_path": "./whisper/main.exe",
+  "whisper_model": "./whisper/ggml-base.bin"
+}
