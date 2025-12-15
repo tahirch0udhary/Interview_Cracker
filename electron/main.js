@@ -80,6 +80,19 @@ ipcMain.handle('ai:generate', async (event, { provider, prompt, responseSize, hi
   }
 });
 
+// Clear OpenAI thread (for new conversation)
+ipcMain.handle('ai:clearThread', async (event, { provider }) => {
+  try {
+    if (provider === 'openai') {
+      return require('./ai-workers/openai_client').clearThread(config.openai_api_key);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Clear thread error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('whisper:transcribe', async (event, audioBuffer) => {
   return require('./ai-workers/whisper_worker').transcribe(audioBuffer, config);
 });

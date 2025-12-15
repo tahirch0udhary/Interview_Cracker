@@ -35,7 +35,13 @@ npm install
 
 ### 3. Configure API Keys
 
-Create or edit `config.json` in the root directory:
+Copy the example config file and add your API keys:
+
+```bash
+cp config.example.json config.json
+```
+
+Edit `config.json`:
 
 ```json
 {

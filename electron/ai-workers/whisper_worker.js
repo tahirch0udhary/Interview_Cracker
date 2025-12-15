@@ -21,7 +21,7 @@ async function convertToWav(inputPath, outputPath) {
     
     const args = [
       '-i', inputPath,
-      '-af', 'volume=2.0,highpass=f=80,lowpass=f=8000',  // Boost volume, gentle filtering for speech
+      '-af', 'highpass=f=100,lowpass=f=7500,volume=1.5',  // Gentle filtering, mild boost - preserve speech clarity
       '-ar', '16000',      // Sample rate 16kHz (required by Whisper)
       '-ac', '1',          // Mono audio
       '-c:a', 'pcm_s16le', // PCM 16-bit little-endian
@@ -82,13 +82,68 @@ async function transcribe(audioBuffer, config) {
     // Write the webm file
     const buffer = Buffer.from(audioBuffer);
     console.log(`Audio buffer received: ${buffer.length} bytes`);
+    
+    // Check minimum size - very small files are likely corrupted
+    if (buffer.length < 100) {
+      console.warn('⚠️ Audio buffer too small, likely empty or corrupted');
+      return 'No speech detected - audio too short';
+    }
+    
+    // Check if buffer looks like a valid WebM file
+    const webmHeader = buffer.slice(0, 4).toString('hex');
+    console.log(`WebM header bytes: ${webmHeader}`);
+    // WebM files start with 0x1A45DFA3 (EBML header)
+    if (!webmHeader.startsWith('1a45dfa3')) {
+      console.warn('⚠️ Buffer does not appear to be a standard WebM file. Header:', webmHeader);
+      console.warn('First 20 bytes hex:', buffer.slice(0, 20).toString('hex'));
+      // Don't return error - let FFmpeg try to handle it, it's more forgiving
+      console.log('Attempting FFmpeg conversion anyway...');
+    }
+    
     fs.writeFileSync(tempWebmPath, buffer);
     console.log('Saved WebM to:', tempWebmPath);
+    
+    // Verify written file
+    const savedSize = fs.statSync(tempWebmPath).size;
+    console.log(`Verified saved WebM size: ${savedSize} bytes`);
+    
+    if (savedSize !== buffer.length) {
+      console.error('⚠️ File size mismatch! Expected:', buffer.length, 'Got:', savedSize);
+    }
     
     // Convert WebM to WAV
     console.log('Converting to WAV...');
     await convertToWav(tempWebmPath, tempWavPath);
     console.log('Converted to WAV:', tempWavPath);
+    
+    // Check WAV file for audio content
+    const wavStats = fs.statSync(tempWavPath);
+    console.log(`WAV file size: ${wavStats.size} bytes`);
+    
+    // Analyze WAV file to check if it has actual audio
+    const wavBuffer = fs.readFileSync(tempWavPath);
+    const wavHeader = wavBuffer.toString('ascii', 0, 4);
+    console.log(`WAV header: ${wavHeader}`);
+    
+    // Check audio data for silence (sample values near 0)
+    const dataStart = 44; // WAV header is typically 44 bytes
+    let maxSample = 0;
+    let sumAbs = 0;
+    const sampleCount = Math.min(1000, (wavBuffer.length - dataStart) / 2);
+    for (let i = 0; i < sampleCount; i++) {
+      const sample = wavBuffer.readInt16LE(dataStart + i * 2);
+      maxSample = Math.max(maxSample, Math.abs(sample));
+      sumAbs += Math.abs(sample);
+    }
+    const avgLevel = sumAbs / sampleCount;
+    console.log(`📊 WAV audio analysis: maxSample=${maxSample}, avgLevel=${avgLevel.toFixed(1)}, samples checked=${sampleCount}`);
+    
+    if (maxSample < 100) {
+      console.warn('⚠️ WAV file appears to contain mostly silence!');
+    };
+    if (wavStats.size < 1000) {
+      console.warn('⚠️ WAV file very small, may contain no audio');
+    }
     
     // Get whisper binary and model paths
     const whisperExe = path.resolve(config.whisper_binary_path || './whisper/main.exe');
@@ -144,15 +199,26 @@ async function transcribe(audioBuffer, config) {
             .filter(line => line.length > 0)
             .join(' ');
           
-          // Handle blank audio detection
-          if (stdout.includes('[BLANK_AUDIO]') || text === '' || text === '[BLANK_AUDIO]') {
+          // Clean up common Whisper artifacts
+          text = text
+            .replace(/\[BLANK_AUDIO\]/gi, '')
+            .replace(/\[INAUDIBLE\]/gi, '')
+            .replace(/\(.*?\)/g, '')  // Remove parenthetical notes
+            .replace(/\s+/g, ' ')     // Normalize whitespace
+            .trim();
+          
+          if (stdout.includes('[BLANK_AUDIO]') && text === '') {
             console.log('Whisper detected blank/silent audio');
             cleanup();
             resolve('No speech detected - please check your microphone settings and speak clearly');
+          } else if (text === '') {
+            console.log('Whisper produced empty transcription');
+            cleanup();
+            resolve('No speech detected');
           } else {
             console.log('Transcription result:', text);
             cleanup();
-            resolve(text || 'No speech detected');
+            resolve(text);
           }
         } else {
           cleanup();
