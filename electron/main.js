@@ -1,4 +1,3 @@
-
 const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -65,13 +64,32 @@ try {
   config = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config.json')));
 } catch {}
 
-ipcMain.handle('ai:generate', async (event, { provider, prompt, responseSize, history }) => {
+ipcMain.handle('ai:generate', async (event, { provider, prompt, responseSize, history, apiKey }) => {
   try {
+    console.log('Received API key in backend:', apiKey); // Log the API key received
+
     if (provider === 'gemini') {
-      return require('./ai-workers/gemini_client').generate(prompt, config.gemini_api_key, responseSize, history);
+      // Accept apiKey, model, temperature from frontend if provided, fallback to config.json
+      const { model, temperature } = arguments[1] || {};
+      return require('./ai-workers/gemini_client').generate(
+        prompt,
+        apiKey,
+        responseSize,
+        history,
+        model,
+        temperature
+      );
     }
     if (provider === 'openai') {
-      return require('./ai-workers/openai_client').generate(prompt, config.openai_api_key, responseSize, history);
+      const { model, temperature } = arguments[1] || {};
+      return require('./ai-workers/openai_client').generate(
+        prompt,
+        apiKey,
+        responseSize,
+        history,
+        model,
+        temperature
+      );
     }
     return 'Unknown provider';
   } catch (error) {

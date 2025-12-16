@@ -38,10 +38,13 @@ async function getOrCreateAssistant(openai) {
     }
   }
 
+
+  // Accept model as argument (default fallback for backward compatibility)
+  const model = getOrCreateAssistant.modelOverride || 'gpt-4.1-mini';
   const assistant = await openai.beta.assistants.create({
     name: 'Interview Coach',
     instructions: ASSISTANT_INSTRUCTIONS,
-    model: 'gpt-4.1-mini'
+    model
   });
 
   assistantId = assistant.id;
@@ -71,19 +74,23 @@ async function getOrCreateThread(openai) {
 // ============================================================================
 async function generate(prompt, apiKey, responseSize = 'medium', history = []) {
   try {
-    // Initialize or reuse OpenAI client
-    if (!openaiClient) {
-      openaiClient = new OpenAI({ apiKey });
-    }
+    console.log('Initializing OpenAI client with API key:', apiKey); // Log the API key being used
 
-    const openai = openaiClient;
+    // Always create a new OpenAI client with the provided apiKey
+    const openai = new OpenAI({ apiKey });
     const lengthInstruction = RESPONSE_INSTRUCTIONS[responseSize] || RESPONSE_INSTRUCTIONS.medium;
 
-    // Get or create assistant and thread
+    // Accept model and temperature as arguments (for compatibility with main.js)
+    const args = Array.from(arguments);
+    let model = args.length > 4 && typeof args[4] === 'string' ? args[4] : 'gpt-4.1-mini';
+    let temperature = args.length > 5 && typeof args[5] === 'number' ? args[5] : 1.0;
+
+    // Pass model to assistant creation
+    getOrCreateAssistant.modelOverride = model;
     const asstId = await getOrCreateAssistant(openai);
     const thrdId = await getOrCreateThread(openai);
-    
-    console.log(`Using assistant: ${asstId}, thread: ${thrdId}`);
+
+    console.log(`Using assistant: ${asstId}, thread: ${thrdId}, model: ${model}, temperature: ${temperature}`);
 
     // Add user message to thread
     await openai.beta.threads.messages.create(thrdId, {
@@ -94,9 +101,11 @@ async function generate(prompt, apiKey, responseSize = 'medium', history = []) {
     // Run the assistant and wait for completion using createAndPoll
     console.log('Starting run...');
     const run = await openai.beta.threads.runs.createAndPoll(thrdId, {
-      assistant_id: asstId
+      assistant_id: asstId,
+      model,
+      temperature
     });
-    
+
     console.log(`Run completed with status: ${run.status}`);
 
     if (run.status !== 'completed') {

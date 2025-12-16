@@ -1,4 +1,3 @@
-
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
@@ -148,10 +147,6 @@ async function transcribe(audioBuffer, config) {
     // Get whisper binary and model paths
     const whisperExe = path.resolve(config.whisper_binary_path || './whisper/main.exe');
     const modelPath = path.resolve(config.whisper_model || './whisper/ggml-base.bin');
-    
-    console.log('Whisper exe:', whisperExe);
-    console.log('Model path:', modelPath);
-    console.log('Audio path:', tempWavPath);
     
     return new Promise((resolve, reject) => {
       // whisper.cpp arguments

@@ -90,6 +90,8 @@ function AudioMeter({ label, level }) {
 export default function App() {
   // State
   const [provider, setProvider] = useState('openai')
+  const [apiKey, setApiKey] = useState('')
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [response, setResponse] = useState('')
   const [history, setHistory] = useState([])
@@ -105,6 +107,19 @@ export default function App() {
   const [desktopSources, setDesktopSources] = useState([])
   const [selectedSource, setSelectedSource] = useState('')
   const [listeningStatus, setListeningStatus] = useState('idle')
+  // Model/temperature
+  const OPENAI_MODELS = [
+    { value: 'gpt-3.5-turbo', label: 'gpt-3.5-turbo' },
+    { value: 'gpt-4', label: 'gpt-4' },
+    { value: 'gpt-4o', label: 'gpt-4o' },
+    { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
+  ];
+  const GEMINI_MODELS = [
+    { value: 'gemini-pro', label: 'gemini-pro' },
+    { value: 'gemini-1.5-pro', label: 'gemini-1.5-pro' },
+  ];
+  const [selectedModel, setSelectedModel] = useState(OPENAI_MODELS[0].value);
+  const [temperature, setTemperature] = useState(1.0);
 
   // Refs
   const mediaRecorderRef = useRef(null)
@@ -125,6 +140,12 @@ export default function App() {
 
   // Sync refs with state
   useEffect(() => { audioSourceRef.current = audioSource }, [audioSource])
+  // Show API key input when provider changes
+  useEffect(() => {
+    setShowApiKeyInput(true);
+    if (provider === 'openai') setSelectedModel(OPENAI_MODELS[0].value);
+    if (provider === 'gemini') setSelectedModel(GEMINI_MODELS[0].value);
+  }, [provider]);
 
   // Load devices on mount
   useEffect(() => {
@@ -155,13 +176,25 @@ export default function App() {
   // AI & Transcription
   // ---------------------------------------------------------------------------
   async function askAI(promptText = prompt) {
-    if (!promptText.trim()) return
-    setResponse('Processing...')
-    const res = await window.electronAPI.generateAI({ provider, prompt: promptText, responseSize, history })
-    setHistory(h => [...h, { role: 'user', text: promptText }, { role: 'ai', text: res }])
-    setResponse(res)
-    setPrompt('')
-    return res
+    if (!promptText.trim()) return;
+    setResponse('Processing...');
+
+    console.log('Sending API key to backend:', apiKey); // Log the API key being sent
+
+    const res = await window.electronAPI.generateAI({
+      provider,
+      prompt: promptText,
+      responseSize,
+      history,
+      apiKey,
+      model: selectedModel,
+      temperature: provider === 'openai' || provider === 'gemini' ? temperature : undefined,
+    });
+
+    setHistory(h => [...h, { role: 'user', text: promptText }, { role: 'ai', text: res }]);
+    setResponse(res);
+    setPrompt('');
+    return res;
   }
 
   async function processAudioChunk() {
@@ -504,6 +537,49 @@ export default function App() {
           </select>
         </label>
 
+        {showApiKeyInput && (
+          <label className="font-semibold">
+            API Key:
+            <input
+              type="password"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              className="ml-2 px-2 py-1 border rounded w-64"
+              placeholder={`Enter your ${provider === 'openai' ? 'OpenAI' : 'Gemini'} API key`}
+            />
+          </label>
+        )}
+
+        <label className="font-semibold">
+          Model:
+          <select
+            value={selectedModel}
+            onChange={e => setSelectedModel(e.target.value)}
+            className="ml-2 px-2 py-1 border rounded"
+          >
+            {(provider === 'openai' ? OPENAI_MODELS : GEMINI_MODELS).map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </label>
+
+        {(provider === 'openai' || provider === 'gemini') && (
+          <label className="font-semibold flex items-center gap-2">
+            Temperature:
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="0.01"
+              value={temperature}
+              onChange={e => setTemperature(Number(e.target.value))}
+              className="ml-2"
+              style={{ width: 120 }}
+            />
+            <span className="w-8 inline-block text-center">{temperature.toFixed(2)}</span>
+          </label>
+        )}
+
         <label className="font-semibold">
           Response Size:
           <select value={responseSize} onChange={e => setResponseSize(e.target.value)} className="ml-2 px-2 py-1 border rounded">
@@ -518,6 +594,19 @@ export default function App() {
           Auto-send
         </label>
       </div>
+      {/* Reset Button */}
+      <button
+        onClick={() => {
+          setApiKey('');
+          setSelectedModel(provider === 'openai' ? OPENAI_MODELS[0].value : GEMINI_MODELS[0].value);
+          setTemperature(1.0);
+          setResponseSize('medium');
+          setPrompt('');
+        }}
+        className="px-4 py-2 bg-gray-500 text-white rounded-lg shadow hover:bg-gray-600 mb-3"
+      >
+        Reset to Defaults
+      </button>
 
       <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
         <div className="mb-3 flex items-center gap-4 flex-wrap">
