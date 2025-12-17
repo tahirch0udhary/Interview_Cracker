@@ -109,15 +109,60 @@ export default function App() {
   const [listeningStatus, setListeningStatus] = useState('idle')
   // Model/temperature
   const OPENAI_MODELS = [
-    { value: 'gpt-3.5-turbo', label: 'gpt-3.5-turbo' },
-    { value: 'gpt-4', label: 'gpt-4' },
-    { value: 'gpt-4o', label: 'gpt-4o' },
-    { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
+    {
+      value: 'gpt-4.1-mini',
+      label: 'GPT-4.1 Mini',
+      supportsTemperature: true,
+      multimodal: false,
+    },
+
+    {
+      value: 'gpt-4o',
+      label: 'GPT-4o (Multimodal)',
+      supportsTemperature: true,
+      multimodal: true,
+    },
+
+    // 🔹 Fast & cheap
+    {
+      value: 'gpt-4o-mini',
+      label: 'GPT-4o Mini',
+      supportsTemperature: true,
+      multimodal: true,
+    },
+
+    // 🔹 High reasoning (text)
+    {
+      value: 'gpt-4.1',
+      label: 'GPT-4.1',
+      supportsTemperature: true,
+      multimodal: false,
+    },
+    // 🔹 Reasoning-only (no temperature)
+    {
+      value: 'o3',
+      label: 'O3 (Reasoning)',
+      supportsTemperature: false,
+      multimodal: false,
+    },
+
+    {
+      value: 'o4-mini',
+      label: 'O4 Mini (Reasoning)',
+      supportsTemperature: false,
+      multimodal: false,
+    },
   ];
+
+
   const GEMINI_MODELS = [
-    { value: 'gemini-pro', label: 'gemini-pro' },
-    { value: 'gemini-1.5-pro', label: 'gemini-1.5-pro' },
-  ];
+  { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', supportsTemperature: true },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', supportsTemperature: true },
+  { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite', supportsTemperature: true },
+  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', supportsTemperature: true },
+  { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite', supportsTemperature: true },
+];
+
   const [selectedModel, setSelectedModel] = useState(OPENAI_MODELS[0].value);
   const [temperature, setTemperature] = useState(1.0);
 
@@ -554,7 +599,16 @@ export default function App() {
           Model:
           <select
             value={selectedModel}
-            onChange={e => setSelectedModel(e.target.value)}
+            onChange={e => {
+              const model = e.target.value;
+              setSelectedModel(model);
+              const selected = OPENAI_MODELS.find(m => m.value === model);
+              if (selected && !selected.supportsTemperature) {
+                setTemperature(null); // Disable temperature if not supported
+              } else {
+                setTemperature(1.0); // Reset to default if supported
+              }
+            }}
             className="ml-2 px-2 py-1 border rounded"
           >
             {(provider === 'openai' ? OPENAI_MODELS : GEMINI_MODELS).map(m => (
@@ -563,21 +617,19 @@ export default function App() {
           </select>
         </label>
 
-        {(provider === 'openai' || provider === 'gemini') && (
-          <label className="font-semibold flex items-center gap-2">
-            Temperature:
+        {(provider === 'openai' || provider === 'gemini') && (OPENAI_MODELS.concat(GEMINI_MODELS).find(m => m.value === selectedModel)?.supportsTemperature) && (
+          <div className="mb-3">
+            <label className="text-sm font-medium text-gray-700">Temperature:</label>
             <input
-              type="range"
+              type="number"
+              value={temperature}
+              onChange={e => setTemperature(parseFloat(e.target.value))}
+              className="p-1 border rounded text-sm w-full"
               min="0"
               max="2"
-              step="0.01"
-              value={temperature}
-              onChange={e => setTemperature(Number(e.target.value))}
-              className="ml-2"
-              style={{ width: 120 }}
+              step="0.1"
             />
-            <span className="w-8 inline-block text-center">{temperature.toFixed(2)}</span>
-          </label>
+          </div>
         )}
 
         <label className="font-semibold">
@@ -590,7 +642,7 @@ export default function App() {
         </label>
 
         <label className="flex items-center gap-2 font-semibold">
-          <input type="checkbox" checked={autoSend} onChange={e => setAutoSend(e.target.checked)} className="w-4 h-4" />
+          <input type="checkbox" checked={true} disabled className="w-4 h-4" />
           Auto-send
         </label>
       </div>
@@ -641,17 +693,25 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
-          <button
-            onClick={toggleRecording}
-            disabled={isTranscribing && !isRecording}
-            className={`px-6 py-3 rounded-full shadow font-semibold flex items-center gap-2 ${isRecording ? 'bg-red-600 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'} ${isTranscribing && !isRecording ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isRecording ? (
-              <><span className="w-3 h-3 bg-white rounded-full animate-pulse" /> Stop</>
-            ) : (
-              <>🎤 {isTranscribing ? 'Transcribing...' : 'Start'}</>
+          <div className="relative">
+            <button
+              onClick={() => {
+                if (!apiKey) return;
+                toggleRecording();
+              }}
+              disabled={!apiKey || (isTranscribing && !isRecording)}
+              className={`px-6 py-3 rounded-full shadow font-semibold flex items-center gap-2 ${isRecording ? 'bg-red-600 text-white' : 'bg-purple-600 text-white hover:bg-purple-700'} ${(!apiKey || (isTranscribing && !isRecording)) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {isRecording ? (
+                <><span className="w-3 h-3 bg-white rounded-full animate-pulse" /> Stop</>
+              ) : (
+                <>🎤 {isTranscribing ? 'Transcribing...' : 'Start'}</>
+              )}
+            </button>
+            {!apiKey && (
+              <p className="text-xs text-red-500 mt-1">Please enter your API key to enable this button.</p>
             )}
-          </button>
+          </div>
 
           {isRecording && (
             <div className="flex flex-col gap-2">

@@ -15,6 +15,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@tailwindcss/typography": "^0.5.19",
+    "adm-zip": "^0.5.16",
     "cross-fetch": "^3.1.5",
     "ffmpeg-static": "^5.3.0",
     "fluent-ffmpeg": "^2.1.3",
